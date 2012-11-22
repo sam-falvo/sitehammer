@@ -7,6 +7,8 @@
 _obj
 _test
 _site
+bin
+pkg
 
 # Architecture specific extensions/prefixes
 *.[568vq]
