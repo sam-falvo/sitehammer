@@ -10,7 +10,6 @@ _site
 bin
 pkg
 article
-src
 
 
 # Architecture specific extensions/prefixes
