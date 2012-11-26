@@ -60,8 +60,8 @@ type descriptor struct {
 // Observe that the body is optional (can be nil).
 type articleData struct {
 	descriptor
-	Abstract	string
-	Body		*string
+	Abstract	template.HTML
+	Body		*template.HTML
 }
 
 
@@ -76,6 +76,24 @@ func abend(reason error) {
 }
 
 
+// validateDescriptors performs a sanity check over the set of descriptors.
+// An error is returned if at least one of the following conditions exists:
+// (1) Greater than one article descriptor shares a common Id.
+// (2) Title, author, or published fields have zero length.
+func validateDescriptors(ds []descriptor) error {
+	for i, d := range ds {
+		if len(d.Title) == 0 { return fmt.Errorf("Article ID %d has zero-length title.", d.Id); }
+		if len(d.Author) == 0 { return fmt.Errorf("Article ID %d has zero-length author.", d.Id); }
+		if len(d.Published) == 0 { return fmt.Errorf("Article ID %d has zero-length publication timestamp.", d.Id); }
+
+		for _, e := range ds[i+1:len(ds)] {
+			if d.Id == e.Id { return fmt.Errorf("More than one article with ID %d", d.Id) }
+		}
+	}
+	return nil
+}
+
+
 func main() {
 	var descriptors []descriptor;
 
@@ -85,6 +103,7 @@ func main() {
 
 	raw, err := ioutil.ReadFile(args[0]); abend(err);
 	err = json.Unmarshal(raw, &descriptors); abend(err);
+	err = validateDescriptors(descriptors); abend(err);
 
 	for _, descriptor := range descriptors {
 		err = emitStaticHTMLForArticle(descriptor); abend(err)
@@ -149,13 +168,13 @@ func inputFilenameFor(id uint, kind string) string {
 // For an article with ID 1234, SiteHammer's blog command expects the abstract to appear in the ./src/1234/abstract file.
 // If not found, it returns a relevant error.
 // Otherwise, it returns the raw text contained in the abstract.
-func abstractFor(id uint) (text string, err error) {
+func abstractFor(id uint) (text template.HTML, err error) {
 	content, err := ioutil.ReadFile(inputFilenameFor(id, "abstract"))
 	if err != nil {
 		text = ""
 		return
 	}
-	text = *bytesAsString(content)
+	text = template.HTML(*bytesAsString(content))
 	return
 }
 
@@ -164,10 +183,11 @@ func abstractFor(id uint) (text string, err error) {
 // This procedure cannot fail.
 // If, for some reason, a body file cannot be found, nil is returned.
 // Otherwise, a slice containing the entirety of the body results.
-func bodyFor(id uint) *string {
+func bodyFor(id uint) *template.HTML {
 	text, err := ioutil.ReadFile(inputFilenameFor(id, "body"))
 	if err != nil { return nil }
-	return bytesAsString(text)
+	h := template.HTML(*bytesAsString(text))
+	return &h
 }
 
 
