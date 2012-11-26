@@ -9,6 +9,9 @@ _test
 _site
 bin
 pkg
+article
+src
+
 
 # Architecture specific extensions/prefixes
 *.[568vq]
