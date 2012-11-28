@@ -17,6 +17,7 @@ E.g., ./src/1024/abstract or ./src/1024/body.
 */
 package main
 
+
 import (
 	"bytes"
 	"encoding/json"
@@ -27,11 +28,28 @@ import (
 	"os"
 )
 
+
 // The default place for SiteHammer to look for the template used to generate a blog article.
 const blogArticleFilename = "templates/blog-article.html"
 
+// The default place for SiteHammer to look for the template used to generate the blog's front matter/home page.
+const blogIndexFilename = "templates/blog-index.html"
+
 // The default place for SiteHammer to place blog article output.
 const articleDirName = "./article"
+
+// When creating a new index file, there's the possibility that something will break.
+// To prevent damage to the old index file, the blog command will create the new index
+// in a temporary file first.
+const indexFileCreated = "./index.html.inprogress"
+
+// After the new index has been successfully created, the blog command promotes the new index to replace the old.
+const outputIndexFile = "./index.html"
+
+// The number of articles to show on the index page.
+// TODO(sfalvo): Make this a user-configurable setting.
+const numberOfArticlesOnIndexPage = 5
+
 
 // descriptor describes a single article in the blog.
 // When running the blog generator, the article descriptors file contains an array of these structures, encoded in JSON format.
@@ -115,7 +133,38 @@ func main() {
 		err = emitStaticHTMLForArticle(descriptor)
 		abend(err)
 	}
+
+	err = emitStaticHTMLForFrontMatter(descriptors)
+	abend(err)
+	err = os.Rename(indexFileCreated, outputIndexFile)
+	abend(err)
 }
+
+
+// emitStaticHTMLForFrontMatter creates the index.html file for the blog's initial landing page.
+func emitStaticHTMLForFrontMatter(ds []descriptor) error {
+        finish := len(ds)
+	start := finish-numberOfArticlesOnIndexPage
+	if start < 0 {
+		start = 0
+	}
+	mostRecentDescriptors := ds[start:finish]
+	templateFileContents, err := blogIndexTemplate()
+	if err != nil {
+		return err
+	}
+	tmpl, err := template.New("SiteHammer Blog Index").Parse(templateFileContents)
+	if err != nil {
+		return err
+	}
+        outputWriter := new(bytes.Buffer)
+	err = tmpl.Execute(outputWriter, mostRecentDescriptors)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(indexFileCreated, outputWriter.Bytes(), 0644)
+}
+
 
 // emitStaticHTMLForArticle does as its name suggests.
 // It will also attempt to create the relevant directories it needs, including article/ and article/{{id}}.
@@ -211,17 +260,27 @@ func bodyFor(id uint) *template.HTML {
 	return &h
 }
 
-// blogArticleTemplate retrieves the blog article template, or an error if unsuccessful.
-// BUG(sam-falvo) Instead of reading and parsing the template every time, I should do this once at program startup.
-// For now, however, it's not a big deal.
-func blogArticleTemplate() (s string, err error) {
+// blogTemplateFor retrieves a blog template file, or an error if unsuccessful.
+func blogTemplateFor(filename string) (s string, err error) {
 	s = ""
-	contents, err := ioutil.ReadFile(blogArticleFilename)
+	contents, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return
 	}
 	s = *bytesAsString(contents)
 	return
+}
+
+// blogIndexTemplate retrieves the blog index.html template, or an error if unsuccessful.
+func blogIndexTemplate() (s string, err error) {
+	return blogTemplateFor(blogIndexFilename)
+}
+
+// blogArticleTemplate retrieves the blog article template, or an error if unsuccessful.
+// BUG(sam-falvo) Instead of reading and parsing the template every time, I should do this once at program startup.
+// For now, however, it's not a big deal.
+func blogArticleTemplate() (s string, err error) {
+	return blogTemplateFor(blogArticleFilename)
 }
 
 // bytesAsString converts []byte to a string pointer.
