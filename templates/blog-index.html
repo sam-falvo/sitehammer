@@ -1,2 +1,38 @@
-{{range .}}--> {{.Id}}{{end}}
-Hallo!
+<html>
+ <head>
+  <title>
+   The Memo . . .
+  </title>
+  <link rel="stylesheet" href="/theme/css.css" />
+  <link rel="alternate" type="application/rss+xml" title="RSS" href="/feed/rss">
+ </head>
+ <body>
+  <table>
+   <tr>
+    <td width="100%" align="left" valign="top">
+     <div class="blogHead">
+      Falvotech.
+     </div>
+     <div class="blogSubhead">
+      Didn't You Get the Memo?
+     </div>
+    </td>
+    <td width="48" align="right" valign="top">
+     <a href="/feed/rss"><img width="48" height="48" src="/theme/rss48.png" border="0" /></a>
+    </td>
+   </tr>
+  </table>
+  <hr />
+  <div id="blogLastFivePosts">
+   <div class="blogArticleIndex">
+{{range .}}
+    <div class="blogArticleIndexTitle"><a href="/articles/{{.Id}}">{{.Title}}</a></div>
+    <div class="blogArticleIndexTimestamp">{{.Published}} &mdash; {{.Author}}</div>
+    <div class="blogArticleIndexLead">.Abstract
+     {{if .Title}}<div class="blogArticleIndexContinued">(continued...)</div>{{end}}
+    </div>
+{{end}}
+   </div>
+  </div>
+ </body>
+</html>
