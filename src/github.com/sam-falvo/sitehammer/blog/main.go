@@ -17,7 +17,6 @@ E.g., ./src/1024/abstract or ./src/1024/body.
 */
 package main
 
-
 import (
 	"bytes"
 	"encoding/json"
@@ -27,7 +26,6 @@ import (
 	"io/ioutil"
 	"os"
 )
-
 
 // The default place for SiteHammer to look for the template used to generate a blog article.
 const blogArticleFilename = "templates/blog-article.html"
@@ -49,7 +47,6 @@ const outputIndexFile = "./index.html"
 // The number of articles to show on the index page.
 // TODO(sfalvo): Make this a user-configurable setting.
 const numberOfArticlesOnIndexPage = 5
-
 
 // descriptor describes a single article in the blog.
 // When running the blog generator, the article descriptors file contains an array of these structures, encoded in JSON format.
@@ -140,11 +137,10 @@ func main() {
 	abend(err)
 }
 
-
 // emitStaticHTMLForFrontMatter creates the index.html file for the blog's initial landing page.
 func emitStaticHTMLForFrontMatter(ds []descriptor) error {
-        finish := len(ds)
-	start := finish-numberOfArticlesOnIndexPage
+	finish := len(ds)
+	start := finish - numberOfArticlesOnIndexPage
 	if start < 0 {
 		start = 0
 	}
@@ -157,14 +153,13 @@ func emitStaticHTMLForFrontMatter(ds []descriptor) error {
 	if err != nil {
 		return err
 	}
-        outputWriter := new(bytes.Buffer)
+	outputWriter := new(bytes.Buffer)
 	err = tmpl.Execute(outputWriter, mostRecentDescriptors)
 	if err != nil {
 		return err
 	}
 	return ioutil.WriteFile(indexFileCreated, outputWriter.Bytes(), 0644)
 }
-
 
 // emitStaticHTMLForArticle does as its name suggests.
 // It will also attempt to create the relevant directories it needs, including article/ and article/{{id}}.
