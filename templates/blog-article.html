@@ -11,7 +11,8 @@
       Author: {{.Author}}
    Published: {{.Published}}
     Abstract: {{.Abstract}}
-        Body: {{.Body}}
+     HasBody: {{.HasBody}}{{if .HasBody}}
+        Body: {{.Body}}{{end}}
   </p>
  </body>
 </html>

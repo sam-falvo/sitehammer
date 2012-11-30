@@ -28,8 +28,8 @@
 {{range .}}
     <div class="blogArticleIndexTitle"><a href="/articles/{{.Id}}">{{.Title}}</a></div>
     <div class="blogArticleIndexTimestamp">{{.Published}} &mdash; {{.Author}}</div>
-    <div class="blogArticleIndexLead">.Abstract
-     {{if .Title}}<div class="blogArticleIndexContinued">(continued...)</div>{{end}}
+    <div class="blogArticleIndexLead">{{.Abstract}}
+     {{if .HasBody}}<div class="blogArticleIndexContinued">(continued...)</div>{{end}}
     </div>
 {{end}}
    </div>

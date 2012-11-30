@@ -72,7 +72,8 @@ type descriptor struct {
 type articleData struct {
 	descriptor
 	Abstract template.HTML
-	Body     *template.HTML
+	Body     template.HTML
+	HasBody  bool
 }
 
 // abend abnormally ends the program, usually as a result of some blocking error.
@@ -110,8 +111,62 @@ func validateDescriptors(ds []descriptor) error {
 	return nil
 }
 
+// retrieveAbstractsAndBodies maps article descriptors to their corresponding abstracts and, optionally, bodies.
+func retrieveAbstractsAndBodies(ds []descriptor) (as []articleData, err error) {
+	var a,b template.HTML
+	var hasBody bool
+
+	err = nil
+	as = make([]articleData, len(ds))
+	for i, d := range ds {
+		a, err = abstractFor(d.Id)
+		if err != nil {
+			return
+		}
+		b, hasBody = bodyFor(d.Id)
+		as[i] = articleData{
+			descriptor: descriptor {
+				Id: d.Id,
+				Title: d.Title,
+				Author: d.Author,
+				Published: d.Published,
+			},
+			Abstract: a,
+			Body: b,
+			HasBody: hasBody,
+		}
+	}
+	return
+}
+
+// generateArticlePages creates a directory structure for each article passed in.
+// Each article appears as an index.html file within a directory named after the article ID.
+// If an error occurs while processing the article, its directory and index file will be removed.
+func generateArticlePages(as []articleData) (err error) {
+	err = ensureIsDir(articleDirName)
+	if err != nil {
+		return
+	}
+	for _, a := range as {
+		err = ensureIsDir(outputFilenameFor(a.Id, ""))
+		if err != nil {
+			return
+		}
+		err = emitStaticHTMLForArticle(a)
+		if err != nil {
+			err2 := unlinkHtmlAndDir(a.Id)
+			if err2 != nil {
+				err = fmt.Errorf("%s (while recovering from %s)", err2.Error(), err.Error())
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 func main() {
 	var descriptors []descriptor
+	var articles []articleData
 
 	flag.Parse()
 	args := flag.Args()
@@ -125,26 +180,22 @@ func main() {
 	abend(err)
 	err = validateDescriptors(descriptors)
 	abend(err)
-
-	for _, descriptor := range descriptors {
-		err = emitStaticHTMLForArticle(descriptor)
-		abend(err)
-	}
-
-	err = emitStaticHTMLForFrontMatter(descriptors)
+	articles, err = retrieveAbstractsAndBodies(descriptors)
 	abend(err)
-	err = os.Rename(indexFileCreated, outputIndexFile)
+	err = generateArticlePages(articles)
+	abend(err)
+	err = emitStaticHTMLForFrontMatter(articles)
 	abend(err)
 }
 
 // emitStaticHTMLForFrontMatter creates the index.html file for the blog's initial landing page.
-func emitStaticHTMLForFrontMatter(ds []descriptor) error {
-	finish := len(ds)
+func emitStaticHTMLForFrontMatter(as []articleData) error {
+	finish := len(as)
 	start := finish - numberOfArticlesOnIndexPage
 	if start < 0 {
 		start = 0
 	}
-	mostRecentDescriptors := ds[start:finish]
+	mostRecentArticles := as[start:finish]
 	templateFileContents, err := blogIndexTemplate()
 	if err != nil {
 		return err
@@ -154,23 +205,22 @@ func emitStaticHTMLForFrontMatter(ds []descriptor) error {
 		return err
 	}
 	outputWriter := new(bytes.Buffer)
-	err = tmpl.Execute(outputWriter, mostRecentDescriptors)
+	err = tmpl.Execute(outputWriter, mostRecentArticles)
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(indexFileCreated, outputWriter.Bytes(), 0644)
+	err = ioutil.WriteFile(indexFileCreated, outputWriter.Bytes(), 0644)
+	if err != nil {
+		return err
+	}
+	return os.Rename(indexFileCreated, outputIndexFile)
 }
 
 // emitStaticHTMLForArticle does as its name suggests.
 // It will also attempt to create the relevant directories it needs, including article/ and article/{{id}}.
 // If any error occurs while creating the final HTML, all resources related to the article will be removed.
 // This leaves the filesystem in a consistent state.
-func emitStaticHTMLForArticle(d descriptor) error {
-	abstract, err := abstractFor(d.Id)
-	if err != nil {
-		return err
-	}
-	body := bodyFor(d.Id)
+func emitStaticHTMLForArticle(a articleData) error {
 	templateFileContents, err := blogArticleTemplate()
 	if err != nil {
 		return err
@@ -179,42 +229,12 @@ func emitStaticHTMLForArticle(d descriptor) error {
 	if err != nil {
 		return err
 	}
-	keys := &articleData{
-		descriptor: descriptor{
-			Id:        d.Id,
-			Title:     d.Title,
-			Author:    d.Author,
-			Published: d.Published,
-		},
-		Abstract: abstract,
-		Body:     body,
-	}
 	outputWriter := new(bytes.Buffer)
-	err = tmpl.Execute(outputWriter, keys)
+	err = tmpl.Execute(outputWriter, a)
 	if err != nil {
 		return err
 	}
-	err = ensureExistanceOfOutputDirectories(d.Id)
-	if err != nil {
-		return err
-	}
-
-	err = generateIndexFile(d.Id, outputWriter.Bytes())
-	if err != nil {
-		err2 := unlinkHtmlAndDir(d.Id)
-		if err2 != nil {
-			return err2
-		}
-		return err
-	}
-
-	return nil
-}
-
-// Writes out text to an article's index.html file.
-// Returns nil if everything went OK; otherwise, an error is returned.
-func generateIndexFile(id uint, content []byte) error {
-	return ioutil.WriteFile(outputFilenameFor(id, "index.html"), content, 0644)
+	return ioutil.WriteFile(outputFilenameFor(a.Id, "index.html"), outputWriter.Bytes(), 0644)
 }
 
 // unlinkHtmlAndDir attempts to remove the index.html file and the directory it sits in.
@@ -226,6 +246,14 @@ func unlinkHtmlAndDir(id uint) error {
 // inputFilenameFor derives a filename in source data filesystem space.
 func inputFilenameFor(id uint, kind string) string {
 	return fmt.Sprintf("src/%d/%s", id, kind)
+}
+
+// bytesAsString converts []byte to a string pointer.
+// If you want just a regular string, use *bytesAsString().
+func bytesAsString(bs []byte) *string {
+	buf := bytes.NewBuffer(bs)
+	s := buf.String()
+	return &s
 }
 
 // abstractFor attempts to locate the abstract for an article.
@@ -243,16 +271,18 @@ func abstractFor(id uint) (text template.HTML, err error) {
 }
 
 // bodyFor attempts to locate the body for an article.
-// This procedure cannot fail.
-// If, for some reason, a body file cannot be found, nil is returned.
-// Otherwise, a slice containing the entirety of the body results.
-func bodyFor(id uint) *template.HTML {
+// If, for some reason, a body file cannot be found, hasBody will be false.
+// Otherwise, an HTML string containing the entirety of the body results.
+func bodyFor(id uint) (body template.HTML, hasBody bool) {
 	text, err := ioutil.ReadFile(inputFilenameFor(id, "body"))
 	if err != nil {
-		return nil
+		body = template.HTML("")
+		hasBody = false
+		return
 	}
-	h := template.HTML(*bytesAsString(text))
-	return &h
+	body = template.HTML(*bytesAsString(text))
+	hasBody = true
+	return
 }
 
 // blogTemplateFor retrieves a blog template file, or an error if unsuccessful.
@@ -276,27 +306,6 @@ func blogIndexTemplate() (s string, err error) {
 // For now, however, it's not a big deal.
 func blogArticleTemplate() (s string, err error) {
 	return blogTemplateFor(blogArticleFilename)
-}
-
-// bytesAsString converts []byte to a string pointer.
-// If you want just a regular string, use *bytesAsString().
-func bytesAsString(bs []byte) *string {
-	buf := bytes.NewBuffer(bs)
-	s := buf.String()
-	return &s
-}
-
-// ensureExistanceOfOutputDirectories does as its name suggests.
-// If the article directory doesn't exist, attempt to create it.
-// Assuming that's successful, attempt to create the directory for the article ID as well.
-// Return success only if both directories were created OR if they already existed.
-// Otherwise, return a meaningful error.
-func ensureExistanceOfOutputDirectories(id uint) error {
-	err := ensureIsDir(articleDirName)
-	if err != nil {
-		return err
-	}
-	return ensureIsDir(outputFilenameFor(id, ""))
 }
 
 // ensureIsDir checks to see if the given pathname already exists as a directory.
