@@ -1,18 +1,49 @@
 <html>
  <head>
   <title>
-   {{.Title}}
+   {{.a.Title}} &mdash; The Memo
   </title>
+  <link rel="stylesheet" href="/theme/css.css">
  </head>
  <body>
-  <p>
-          ID: {{.Id}}
-       Title: {{.Title}}
-      Author: {{.Author}}
-   Published: {{.Published}}
-    Abstract: {{.Abstract}}
-     HasBody: {{.HasBody}}{{if .HasBody}}
-        Body: {{.Body}}{{end}}
-  </p>
+  <div class="blogHead">
+   Falvotech.
+  </div>
+  <div class="blogSubhead">
+   Didn't You Get the Memo?
+  </div>
+  <hr />
+  <table width="100%">
+   <tr>
+    <td width="15%" valign="top" align="left">
+     <div>
+      <p align="center">L I N K S</p>
+      <hr />
+      <p><a href="{{.home}}">&uArr; Home</a></p>{{if HasPrevLink .i}}
+      <p><a href="{{PrevArticle .i | Url}}">&lArr; {{with PrevArticle .i}}{{.Title}}{{end}}</a></p>{{else}}
+      <p>&lArr; No previous link exists.{{end}}{{if HasNextLink .i .last}}
+      <p><a href="{{NextArticle .i | Url}}">&rArr; {{with NextArticle .i}}{{.Title}}{{end}}</a></p>{{else}}
+      <p>&rArr; No next link yet exists.</p>{{end}}
+      <hr />
+     </div>
+    </td>
+    <td width="85%" valign="top" align="left">
+     <div class="blogArticleTitle">
+      {{.a.Title}}
+     </div>
+     <div class="blogArticleTimestampAuthor">
+      <div class="blogArticleAuthor">{{.a.Author}}<br />{{.a.Email}}</div>
+      <div class="blogArticleTimestamp">{{.a.Published}}</div>
+     </div>
+     <div class="blogArticleLead">
+      {{.a.Abstract}}
+     </div>
+     <div class="blogArticleBody">
+      {{.a.Body}}
+     </div>
+    </td>
+   </tr>
+  </table>
  </body>
 </html>
+

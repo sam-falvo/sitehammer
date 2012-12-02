@@ -5,15 +5,49 @@ USAGE: blog descs.json
 
 WHERE: descs.json - a file containing a JSON array of article descriptors.
 
-Blog articles are rendered in an output directory called ./article.
+Blog articles are rendered in an output directory called ./articles.
 Each article rendered exists in a subdirectory named after the numeric article ID.
-For example, ./article/1024/index.html.
+For example, ./articles/1024/index.html.
 This allows easy linking to the articles.
 
 The source material for each article appears in a source directory named ./src.
-Traditionally, descs.json appears inside ./src.
-When looking for abstracts or bodies for each article, the blog command looks in a directory named for the article ID.
+Traditionally, descs.json also appears inside ./src, but doesn't have to.
+When looking for abstracts or bodies for each article,
+the blog command looks in a directory named for the article ID.
 E.g., ./src/1024/abstract or ./src/1024/body.
+
+The descriptor file contains a JSON description of the set of articles to appear on the blog.
+Below is a sample descriptor file:
+
+	[
+	  {
+	    "Id": 1234,
+	    "Title": "Hello",
+	    "Author": "Sam",
+	    "Published": "2012-Jan-01",
+	    "Email": "kc5tja@arrl.net"
+	  }, {
+	    "Id": 1235,
+	    "Title": "World",
+	    "Author": "Sam",
+	    "Published": "2012-Jan-01",
+	    "Email": "kc5tja@arrl.net"
+	  }, {
+	    "Id": 1236,
+	    "Title": "Who are you?",
+	    "Author": "The Who",
+	    "Published": "2012-Jan-02",
+	    "Email": "ptownsend@thewho.com"
+	  },
+	]
+
+At present five fields may be specified about each article.
+The Id field numerically identifies the post.
+The Title field gives the post a human-readable name.
+This name appears in links leading to the article, for example.
+The Author field tells who wrote the article.
+The Published field indicates when the article was first published.
+Finally, Email provides contact information for the author.
 */
 package main
 
@@ -27,6 +61,11 @@ import (
 	"os"
 )
 
+// blogBaseUrl points to the blog on the web.
+// You should be able to cut-and-paste this URL into the address bar of the browser and get a valid index page.
+// There should be no trailing slash.
+const blogBaseUrl = "http://www.falvotech.com"
+
 // The default place for SiteHammer to look for the template used to generate a blog article.
 const blogArticleFilename = "templates/blog-article.html"
 
@@ -34,7 +73,7 @@ const blogArticleFilename = "templates/blog-article.html"
 const blogIndexFilename = "templates/blog-index.html"
 
 // The default place for SiteHammer to place blog article output.
-const articleDirName = "./article"
+const articleDirName = "./articles"
 
 // When creating a new index file, there's the possibility that something will break.
 // To prevent damage to the old index file, the blog command will create the new index
@@ -63,6 +102,7 @@ type descriptor struct {
 	Id        uint
 	Title     string
 	Author    string
+	Email     string
 	Published string
 }
 
@@ -71,9 +111,9 @@ type descriptor struct {
 // Observe that the body is optional (can be nil).
 type articleData struct {
 	descriptor
-	Abstract template.HTML
-	Body     template.HTML
-	HasBody  bool
+	Abstract    template.HTML
+	Body        template.HTML
+	HasBody     bool
 }
 
 // abend abnormally ends the program, usually as a result of some blocking error.
@@ -112,23 +152,24 @@ func validateDescriptors(ds []descriptor) error {
 }
 
 // retrieveAbstractsAndBodies maps article descriptors to their corresponding abstracts and, optionally, bodies.
-func retrieveAbstractsAndBodies(ds []descriptor) (as []articleData, err error) {
+func retrieveAbstractsAndBodies(ds []descriptor) (articles []articleData, err error) {
 	var a,b template.HTML
 	var hasBody bool
 
 	err = nil
-	as = make([]articleData, len(ds))
+	articles = make([]articleData, len(ds))
 	for i, d := range ds {
 		a, err = abstractFor(d.Id)
 		if err != nil {
 			return
 		}
 		b, hasBody = bodyFor(d.Id)
-		as[i] = articleData{
+		articles[i] = articleData{
 			descriptor: descriptor {
 				Id: d.Id,
 				Title: d.Title,
 				Author: d.Author,
+				Email: d.Email,
 				Published: d.Published,
 			},
 			Abstract: a,
@@ -142,17 +183,17 @@ func retrieveAbstractsAndBodies(ds []descriptor) (as []articleData, err error) {
 // generateArticlePages creates a directory structure for each article passed in.
 // Each article appears as an index.html file within a directory named after the article ID.
 // If an error occurs while processing the article, its directory and index file will be removed.
-func generateArticlePages(as []articleData) (err error) {
+func generateArticlePages(articles []articleData) (err error) {
 	err = ensureIsDir(articleDirName)
 	if err != nil {
 		return
 	}
-	for _, a := range as {
+	for i, a := range articles {
 		err = ensureIsDir(outputFilenameFor(a.Id, ""))
 		if err != nil {
 			return
 		}
-		err = emitStaticHTMLForArticle(a)
+		err = emitStaticHTMLForArticle(articles, i, len(articles))
 		if err != nil {
 			err2 := unlinkHtmlAndDir(a.Id)
 			if err2 != nil {
@@ -188,14 +229,23 @@ func main() {
 	abend(err)
 }
 
-// emitStaticHTMLForFrontMatter creates the index.html file for the blog's initial landing page.
-func emitStaticHTMLForFrontMatter(as []articleData) error {
-	finish := len(as)
-	start := finish - numberOfArticlesOnIndexPage
-	if start < 0 {
-		start = 0
+func max(a, b int) int {
+	if a > b {
+		return a
 	}
-	mostRecentArticles := as[start:finish]
+	return b
+}
+
+// mostRecent delivers the most recent articles posted to the blog as an array for easy iteration in a template file.
+func mostRecent(articles []articleData) (as []articleData) {
+	last := len(articles)
+	first := max(0, last-5)
+	as = articles[first:last]
+	return
+}
+
+// emitStaticHTMLForFrontMatter creates the index.html file for the blog's initial landing page.
+func emitStaticHTMLForFrontMatter(articles []articleData) error {
 	templateFileContents, err := blogIndexTemplate()
 	if err != nil {
 		return err
@@ -205,7 +255,7 @@ func emitStaticHTMLForFrontMatter(as []articleData) error {
 		return err
 	}
 	outputWriter := new(bytes.Buffer)
-	err = tmpl.Execute(outputWriter, mostRecentArticles)
+	err = tmpl.Execute(outputWriter, mostRecent(articles))
 	if err != nil {
 		return err
 	}
@@ -216,25 +266,44 @@ func emitStaticHTMLForFrontMatter(as []articleData) error {
 	return os.Rename(indexFileCreated, outputIndexFile)
 }
 
+// urlFor returns a string representation of an article's URL.
+func urlFor(a articleData) string {
+	return fmt.Sprintf("%s/articles/%d", blogBaseUrl, a.Id)
+}
+
 // emitStaticHTMLForArticle does as its name suggests.
 // It will also attempt to create the relevant directories it needs, including article/ and article/{{id}}.
 // If any error occurs while creating the final HTML, all resources related to the article will be removed.
 // This leaves the filesystem in a consistent state.
-func emitStaticHTMLForArticle(a articleData) error {
+func emitStaticHTMLForArticle(articles []articleData, index, length int) error {
 	templateFileContents, err := blogArticleTemplate()
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("SiteHammer Blog Article").Parse(templateFileContents)
+	funcs := template.FuncMap {
+		"HasNextLink": func(i, last int) bool { return i+1 != last },
+		"HasPrevLink": func(i int) bool { return i != 0 },
+		"NextArticle": func(i int) articleData { return articles[i+1] },
+		"PrevArticle": func(i int) articleData { return articles[i-1] },
+		"Url": urlFor,
+	}
+	tmpl, err := template.New("SiteHammer Blog Article").Funcs(funcs).Parse(templateFileContents)
 	if err != nil {
 		return err
 	}
 	outputWriter := new(bytes.Buffer)
-	err = tmpl.Execute(outputWriter, a)
+	article := articles[index]
+	params := map[string]interface{} {
+		"a": article,
+		"home": blogBaseUrl,
+		"i": index,
+		"last": length,
+	}
+	err = tmpl.Execute(outputWriter, params)
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(outputFilenameFor(a.Id, "index.html"), outputWriter.Bytes(), 0644)
+	return ioutil.WriteFile(outputFilenameFor(article.Id, "index.html"), outputWriter.Bytes(), 0644)
 }
 
 // unlinkHtmlAndDir attempts to remove the index.html file and the directory it sits in.
@@ -337,3 +406,4 @@ func outputFilenameFor(id uint, kind string) string {
 
 	return fmt.Sprintf("%s/%d", articleDirName, id)
 }
+
