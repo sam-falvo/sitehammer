@@ -64,7 +64,7 @@ import (
 // blogBaseUrl points to the blog on the web.
 // You should be able to cut-and-paste this URL into the address bar of the browser and get a valid index page.
 // There should be no trailing slash.
-const blogBaseUrl = "http://www.falvotech.com"
+var blogBaseUrl *string
 
 // The default place for SiteHammer to look for the template used to generate a blog article.
 const blogArticleFilename = "templates/blog-article.html"
@@ -86,6 +86,7 @@ const outputIndexFile = "./index.html"
 // The number of articles to show on the index page.
 // TODO(sfalvo): Make this a user-configurable setting.
 const numberOfArticlesOnIndexPage = 5
+
 
 // descriptor describes a single article in the blog.
 // When running the blog generator, the article descriptors file contains an array of these structures, encoded in JSON format.
@@ -209,6 +210,7 @@ func main() {
 	var descriptors []descriptor
 	var articles []articleData
 
+	blogBaseUrl = flag.String("u", "http://www.falvotech.com", "Sets the base URL for the blog pages.")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
@@ -250,7 +252,10 @@ func emitStaticHTMLForFrontMatter(articles []articleData) error {
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("SiteHammer Blog Index").Parse(templateFileContents)
+	funcs := template.FuncMap {
+		"Url": urlFor,
+	}
+	tmpl, err := template.New("SiteHammer Blog Index").Funcs(funcs).Parse(templateFileContents)
 	if err != nil {
 		return err
 	}
@@ -268,7 +273,7 @@ func emitStaticHTMLForFrontMatter(articles []articleData) error {
 
 // urlFor returns a string representation of an article's URL.
 func urlFor(a articleData) string {
-	return fmt.Sprintf("%s/articles/%d", blogBaseUrl, a.Id)
+	return fmt.Sprintf("%s/articles/%d", *blogBaseUrl, a.Id)
 }
 
 // emitStaticHTMLForArticle does as its name suggests.
@@ -295,7 +300,7 @@ func emitStaticHTMLForArticle(articles []articleData, index, length int) error {
 	article := articles[index]
 	params := map[string]interface{} {
 		"a": article,
-		"home": blogBaseUrl,
+		"home": *blogBaseUrl,
 		"i": index,
 		"last": length,
 	}
